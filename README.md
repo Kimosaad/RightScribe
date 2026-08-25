@@ -2,7 +2,7 @@
 
 RightScribe is a private, personal macOS 26 menu-bar dictation app. Press right Command once, speak, then press it again. The finalized transcript is inserted into the field that already had focus.
 
-Its warm cream-and-terracotta app icon combines a voice waveform with a pen nib and is bundled at every macOS icon size, including the system privacy and sharing panels.
+Its warm cream-and-muted-clay app icon combines a voice waveform with a pen nib and is bundled at every macOS icon size, including the system privacy and sharing panels.
 
 It can also detect an active call in common meeting apps, ask for explicit consent, and create private meeting notes with separate **You** and **Attendee** transcript channels.
 
