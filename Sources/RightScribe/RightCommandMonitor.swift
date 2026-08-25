@@ -42,6 +42,8 @@ struct RightCommandGestureInterpreter {
 }
 
 final class RightCommandMonitor: @unchecked Sendable {
+    static let tapOptions: CGEventTapOptions = .listenOnly
+
     enum MonitorError: LocalizedError {
         case permissionMissing
         case eventTapCreationFailed
@@ -68,7 +70,6 @@ final class RightCommandMonitor: @unchecked Sendable {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var healthTimer: Timer?
-    private var suppressEscapeKeyUp = false
     private var gesture = RightCommandGestureInterpreter()
 
     func start() throws {
@@ -79,7 +80,6 @@ final class RightCommandMonitor: @unchecked Sendable {
 
         let mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
             | CGEventMask(1 << CGEventType.keyDown.rawValue)
-            | CGEventMask(1 << CGEventType.keyUp.rawValue)
             | CGEventMask(1 << CGEventType.tapDisabledByTimeout.rawValue)
             | CGEventMask(1 << CGEventType.tapDisabledByUserInput.rawValue)
 
@@ -87,14 +87,13 @@ final class RightCommandMonitor: @unchecked Sendable {
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
-            options: .defaultTap,
+            options: Self.tapOptions,
             eventsOfInterest: mask,
             callback: { _, type, event, userInfo in
                 guard let userInfo else { return Unmanaged.passUnretained(event) }
                 let monitor = Unmanaged<RightCommandMonitor>.fromOpaque(userInfo).takeUnretainedValue()
-                return monitor.handle(type: type, event: event)
-                    ? nil
-                    : Unmanaged.passUnretained(event)
+                monitor.observe(type: type, event: event)
+                return Unmanaged.passUnretained(event)
             },
             userInfo: opaqueSelf
         ) else {
@@ -107,12 +106,12 @@ final class RightCommandMonitor: @unchecked Sendable {
         runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
             self?.ensureListenerIsEnabled()
         }
         healthTimer = timer
         RunLoop.main.add(timer, forMode: .common)
-        logger.notice("Right Command event tap started")
+        logger.notice("Passive Right Command event tap started")
     }
 
     func stop() {
@@ -126,18 +125,21 @@ final class RightCommandMonitor: @unchecked Sendable {
         eventTap = nil
         healthTimer?.invalidate()
         healthTimer = nil
-        suppressEscapeKeyUp = false
         gesture.reset()
     }
 
-    private func handle(type: CGEventType, event: CGEvent) -> Bool {
+    private func observe(type: CGEventType, event: CGEvent) {
         switch type {
-        case .tapDisabledByTimeout, .tapDisabledByUserInput:
-            logger.warning("Event tap was disabled by macOS; re-enabling it")
+        case .tapDisabledByTimeout:
+            logger.warning("Passive event tap timed out; re-enabling it")
             gesture.reset()
             if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
             deliverOnMain(onListenerInterrupted)
-            return false
+
+        case .tapDisabledByUserInput:
+            logger.debug("Passive event tap paused by secure input")
+            gesture.reset()
+            deliverOnMain(onListenerInterrupted)
 
         case .flagsChanged:
             let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
@@ -151,29 +153,18 @@ final class RightCommandMonitor: @unchecked Sendable {
             } else {
                 emit(gesture.handleOtherInput())
             }
-            return false
 
         case .keyDown:
             let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-            if keyCode == escapeKeyCode, deliverEscapePressed() {
-                suppressEscapeKeyUp = true
-                return true
+            if keyCode == escapeKeyCode {
+                _ = deliverEscapePressed()
             }
             if keyCode != rightCommandKeyCode {
                 emit(gesture.handleOtherInput())
             }
-            return false
-
-        case .keyUp:
-            let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-            if keyCode == escapeKeyCode, suppressEscapeKeyUp {
-                suppressEscapeKeyUp = false
-                return true
-            }
-            return false
 
         default:
-            return false
+            break
         }
     }
 
@@ -220,9 +211,8 @@ final class RightCommandMonitor: @unchecked Sendable {
 
     private func ensureListenerIsEnabled() {
         guard let eventTap, !CGEvent.tapIsEnabled(tap: eventTap) else { return }
-        logger.warning("Right Command listener health check found it disabled; re-enabling it")
+        logger.debug("Restoring passive keyboard listener after a macOS pause")
         gesture.reset()
         CGEvent.tapEnable(tap: eventTap, enable: true)
-        deliverOnMain(onListenerInterrupted)
     }
 }

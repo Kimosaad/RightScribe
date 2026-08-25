@@ -16,10 +16,10 @@ It can also detect an active call in common meeting apps, ask for explicit conse
 - Never stores audio; successfully inserted transcripts are kept only in local history on this Mac.
 - Treats a press-and-release of right Command as a start/finish toggle. Command-key chords remain normal shortcuts and do not toggle dictation.
 - Stops an active recording immediately on right-Command key-down, with key-release, listener-interruption, and timeout recovery paths as safeguards.
-- Pressing Escape while recording or finalizing immediately discards the session without inserting or saving its transcript.
+- Pressing Escape while recording or finalizing immediately discards the session without inserting or saving its transcript. Escape remains visible to the focused app because the listener is intentionally non-blocking.
 - Opens a visible setup window and keeps a Dock icon available until you choose **Continue in Menu Bar**.
 - Rechecks permissions automatically while setup is open.
-- Uses Accessibility for the right-Command listener, so Input Monitoring is not required.
+- Uses a passive, listen-only Accessibility tap for Right Command and Escape, so RightScribe cannot delay, modify, or swallow ordinary keystrokes and Input Monitoring is not required.
 - Prewarms Apple's speech analyzer before showing Ready, so the first spoken words are captured immediately.
 - Removes conservative filler phrases such as “um,” “uh,” and “you know” by default without removing meaningful uses of “like.”
 - Shows only a compact waveform indicator above the Dock while dictating.

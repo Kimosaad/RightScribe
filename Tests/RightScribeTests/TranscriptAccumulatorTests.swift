@@ -1,7 +1,15 @@
 import XCTest
+import CoreGraphics
 @testable import RightScribe
 
 final class TranscriptAccumulatorTests: XCTestCase {
+    func testKeyboardListenerIsPassiveAndCannotConsumeKeystrokes() {
+        XCTAssertEqual(
+            RightCommandMonitor.tapOptions.rawValue,
+            CGEventTapOptions.listenOnly.rawValue
+        )
+    }
+
     func testFinalAndVolatileSegmentsRemainReadable() {
         var accumulator = TranscriptAccumulator()
         accumulator.receive("Hello", isFinal: true)
