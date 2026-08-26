@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OSLog
 import Speech
 
 actor AppleSpeechEngine {
@@ -10,6 +11,7 @@ actor AppleSpeechEngine {
         case modelNotInstalled
         case audioFormatUnavailable
         case microphoneUnavailable
+        case finalizationFailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -19,10 +21,19 @@ actor AppleSpeechEngine {
             case .modelNotInstalled: return "The English speech model could not be installed."
             case .audioFormatUnavailable: return "RightScribe could not find a compatible microphone format."
             case .microphoneUnavailable: return "No usable microphone input is available."
+            case .finalizationFailed(let reason): return "Speech finalization failed: \(reason)"
             }
         }
     }
 
+    private enum FinalizationOutcome: Sendable {
+        case finished
+        case failed(String)
+        case timeout
+    }
+
+    private let logger = Logger(subsystem: "com.karimsaad.rightscribe", category: "Speech")
+    private static let fastFinalizationMilliseconds = 650
     private var locale: Locale?
     private var analyzer: SpeechAnalyzer?
     private var analyzerFormat: AVAudioFormat?
@@ -150,13 +161,47 @@ actor AppleSpeechEngine {
         inputContinuation?.finish()
         inputContinuation = nil
 
+        var usedProgressiveResult = false
         if let analyzer {
-            try await analyzer.finalizeAndFinishThroughEndOfInput()
+            let outcome = await withTaskGroup(of: FinalizationOutcome.self) { group in
+                group.addTask {
+                    do {
+                        try await analyzer.finalizeAndFinishThroughEndOfInput()
+                        return .finished
+                    } catch {
+                        return .failed(error.localizedDescription)
+                    }
+                }
+                group.addTask {
+                    try? await Task.sleep(
+                        for: .milliseconds(Self.fastFinalizationMilliseconds)
+                    )
+                    return .timeout
+                }
+
+                var first = await group.next() ?? .timeout
+                if case .timeout = first, accumulator.displayText.isEmpty {
+                    first = await group.next() ?? .timeout
+                } else if case .timeout = first {
+                    usedProgressiveResult = true
+                    await analyzer.cancelAndFinishNow()
+                }
+                group.cancelAll()
+                return first
+            }
+
+            if case .failed(let reason) = outcome {
+                throw EngineError.finalizationFailed(reason)
+            }
         }
         await resultsTask?.value
         resultsTask = nil
         analyzer = nil
         analyzerFormat = nil
+        if usedProgressiveResult {
+            logger.notice("Using progressive transcript after the fast finalization budget")
+            return accumulator.displayText
+        }
         return accumulator.finalized
     }
 

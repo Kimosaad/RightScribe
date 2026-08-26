@@ -21,6 +21,8 @@ It can also detect an active call in common meeting apps, ask for explicit conse
 - Rechecks permissions automatically while setup is open.
 - Uses a passive, listen-only Accessibility tap for Right Command and Escape, so RightScribe cannot delay, modify, or swallow ordinary keystrokes and Input Monitoring is not required.
 - Prewarms Apple's speech analyzer before showing Ready, so the first spoken words are captured immediately.
+- Rearms the next speech session while the current transcript is being inserted and only reports Ready once that session is genuinely warm.
+- Uses Apple's accurate finalized transcript when it arrives promptly; after a 650 ms budget, it uses the already-available progressive result so pasting does not wait on a long finalization tail.
 - Removes conservative filler phrases such as “um,” “uh,” and “you know” by default without removing meaningful uses of “like.”
 - Shows only a compact waveform indicator above the Dock while dictating.
 - Saves successfully pasted transcripts in a local history view; audio is never saved.

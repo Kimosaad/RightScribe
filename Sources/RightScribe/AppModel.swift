@@ -545,12 +545,13 @@ final class AppModel: ObservableObject {
             engineSessionStarted = false
             finishRequested = false
             finishTaskStarted = false
+            rearmSpeechEngineInBackground()
 
             guard !transcript.isEmpty else {
                 logger.notice("Dictation finished with an empty transcript")
+                await rearmTask?.value
                 phase = .ready
                 overlay.hide()
-                rearmSpeechEngineInBackground()
                 offerPendingMeetingIfAppropriate()
                 return
             }
@@ -568,12 +569,12 @@ final class AppModel: ObservableObject {
                 throw RightScribeError.actionUnavailable(explanation)
             }
 
+            await rearmTask?.value
             phase = .ready
             logger.notice("RightScribe is ready")
             liveTranscript = ""
             overlay.show(mode: .success, transcript: "Inserted")
             overlay.hide(after: 0.7)
-            rearmSpeechEngineInBackground()
             offerPendingMeetingIfAppropriate()
         } catch {
             finishingWatchdogTask?.cancel()
